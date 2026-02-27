@@ -18,7 +18,7 @@ maiCode follows an **Event-Driven Architecture** with a **Supervisor-Worker agen
 
 ### HLD Diagram
 
-![maiCode-HLD](maiCode_HLD.png)
+![maiCode-HLD](maiCode-HLD.png)
 
 
 ---
