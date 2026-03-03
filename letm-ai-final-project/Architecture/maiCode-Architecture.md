@@ -4,7 +4,7 @@
 
 maiCode is an enterprise-grade AI agentic system built for Nagarro that automates the entire code review lifecycle. It triggers automatically on GitHub Pull Requests, fetches associated Jira tickets via MCP, monitors CI pipelines, reviews code against ticket intent using AI, generates intelligent review comments, identifies missing test cases, updates Jira tickets with review status, and automatically creates QA test tickets. Post-merge, it tracks developer quality metrics to enable data-driven engineering management.
 
-**Tech Stack:** Python 3.12 · LangGraph · LangChain · FastMCP · FastAPI · OpenAI GPT-4o · AWS (ECS Fargate, Lambda, SQS, S3) · MongoDB · GitHub Actions · Jira Cloud
+**Tech Stack:** Python 3.12 · LangGraph · LangChain · LangChain MCP Adapter · FastAPI · OpenAI GPT-4o · AWS (ECS Fargate, Lambda, SQS, S3) · MongoDB · GitHub Actions · Jira Cloud
 
 **Scale:** 10–150 developers · ~100 PRs/day · Multi-repository · Mixed programming languages
 
@@ -18,11 +18,13 @@ maiCode follows an **Event-Driven Architecture** with a **Supervisor-Worker agen
 
 ### HLD Diagram
 
-<!-- INSERT HLD DIAGRAM IMAGE HERE -->
+![maiCode-HLD](maiCode-HLD.png)
 
 ---
 
 ## 3. Application Flow
+
+![maiCode-HLD](maiCode-AppFlow.png)
 
 ### Phase 1 — Ingestion (`< 500ms`)
 
@@ -61,11 +63,11 @@ The Orchestrator Agent picks up the SQS message, initializes LangGraph state, an
 ```
 Orchestrator Agent (initialize state)
     │
-    ├──── ⚡ PARALLEL FORK ────────────┐
+    ├─────── PARALLEL FORK ────────────┐
     │                │                 │
     ▼                ▼                 ▼
-PR Analysis    Jira Context      CI Pipeline
-Agent          Agent             Monitor
+PR Analysis    Jira Context        CI Pipeline
+  Agent            Agent             Monitor
     │                │                 │
     └───┬────────────┘                 │ (continues async)
         ▼                              │
@@ -87,14 +89,14 @@ Code Review starts immediately after PR + Jira context is ready. Test Coverage w
 ```
     ⚡ PARALLEL
          │
-   ┌─────┴──────┐
-   ▼             ▼
+   ┌─────┴─────────────┐
+   ▼                   ▼
 Code Review   CI Monitor (waiting...)
-Agent              │
-   │               ▼ (CI completes)
-   │          Test Coverage Agent
-   │               │
-   └──────┬────────┘
+Agent                  │
+   │                   ▼ (CI completes)
+   │           Test Coverage Agent
+   │                   │
+   └──────┬────────────┘
           ▼
     Analysis Join
 ```
@@ -111,10 +113,10 @@ Agent              │
 ```
     ⚡ PARALLEL FORK
          │
-   ┌─────┴──────┐
-   ▼             ▼
+   ┌─────┴────────┐
+   ▼              ▼
 GitHub        Jira Update
-Comment       Agent
+Comment          Agent
 Agent              │
    │               │
    └──────┬────────┘
@@ -137,46 +139,46 @@ Agent              │
 ### Complete Pipeline Summary
 
 ```
-GitHub Webhook
-     │
-     ▼
+              GitHub Webhook
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 1: INGESTION  (< 500ms)             │
-│  API Gateway → Lambda → SQS                │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+│     PHASE 1: INGESTION  (< 500ms)           │
+│     API Gateway → Lambda → SQS              │
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 2: CONTEXT GATHERING  (5–30s)       │
+│  PHASE 2: CONTEXT GATHERING  (5–30s)        │
 │  Orchestrator picks up SQS message          │
 │                                             │
-│  ⚡ PARALLEL:                               │
+│  PARALLEL:                                  │
 │  ├─ PR Analysis Agent    → state.pr_context │
 │  ├─ Jira Context Agent   → state.jira_ctx   │
 │  └─ CI Pipeline Monitor  → state.ci_results │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 3: ANALYSIS  (30–90s)               │
+│  PHASE 3: ANALYSIS  (30–90s)                │
 │                                             │
-│  ⚡ PARALLEL:                               │
+│  PARALLEL:                                  │
 │  ├─ Code Review Agent    → review_results   │
 │  └─ Test Coverage Agent  → coverage_results │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 4: ACTION  (5–15s)                  │
+│  PHASE 4: ACTION  (5–15s)                   │
 │                                             │
-│  ⚡ PARALLEL:                               │
+│  PARALLEL:                                  │ 
 │  ├─ GitHub Comment Agent → PR comments      │
-│  └─ Jira Update Agent   → Ticket updates   │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+│  └─ Jira Update Agent   → Ticket updates    │
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 5: ANALYTICS  (Async)               │
+│  PHASE 5: ANALYTICS  (Async)                │
 │  Analytics Agent → Developer quality scores │
 │  Post-merge defect tracking (30-day window) │
 └─────────────────────────────────────────────┘
@@ -272,7 +274,7 @@ All agents communicate exclusively through a shared state object (TypedDict). Ag
 |-------|-----------|-------|
 | Language | Python 3.12+ | async/await, type hints |
 | Agent Framework | LangGraph + LangChain | StateGraph for workflow orchestration |
-| MCP Framework | FastMCP | Jira MCP server implementation |
+| MCP Framework | LangChain MCP Adapter | Jira MCP server implementation |
 | LLM | OpenAI GPT-4o | Abstract interface allows provider switch |
 | Web Framework | FastAPI | Admin dashboard API, health checks |
 | GitHub Client | PyGithub + httpx | REST v3 + GraphQL v4 |
