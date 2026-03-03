@@ -61,11 +61,11 @@ The Orchestrator Agent picks up the SQS message, initializes LangGraph state, an
 ```
 Orchestrator Agent (initialize state)
     │
-    ├──── ⚡ PARALLEL FORK ────────────┐
+    ├─────── PARALLEL FORK ────────────┐
     │                │                 │
     ▼                ▼                 ▼
-PR Analysis    Jira Context      CI Pipeline
-Agent          Agent             Monitor
+PR Analysis    Jira Context        CI Pipeline
+  Agent            Agent             Monitor
     │                │                 │
     └───┬────────────┘                 │ (continues async)
         ▼                              │
@@ -87,14 +87,14 @@ Code Review starts immediately after PR + Jira context is ready. Test Coverage w
 ```
     ⚡ PARALLEL
          │
-   ┌─────┴──────┐
-   ▼             ▼
+   ┌─────┴─────────────┐
+   ▼                   ▼
 Code Review   CI Monitor (waiting...)
-Agent              │
-   │               ▼ (CI completes)
-   │          Test Coverage Agent
-   │               │
-   └──────┬────────┘
+Agent                  │
+   │                   ▼ (CI completes)
+   │           Test Coverage Agent
+   │                   │
+   └──────┬────────────┘
           ▼
     Analysis Join
 ```
@@ -111,10 +111,10 @@ Agent              │
 ```
     ⚡ PARALLEL FORK
          │
-   ┌─────┴──────┐
-   ▼             ▼
+   ┌─────┴────────┐
+   ▼              ▼
 GitHub        Jira Update
-Comment       Agent
+Comment          Agent
 Agent              │
    │               │
    └──────┬────────┘
@@ -137,46 +137,46 @@ Agent              │
 ### Complete Pipeline Summary
 
 ```
-GitHub Webhook
-     │
-     ▼
+              GitHub Webhook
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 1: INGESTION  (< 500ms)             │
-│  API Gateway → Lambda → SQS                │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+│     PHASE 1: INGESTION  (< 500ms)           │
+│     API Gateway → Lambda → SQS              │
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 2: CONTEXT GATHERING  (5–30s)       │
+│  PHASE 2: CONTEXT GATHERING  (5–30s)        │
 │  Orchestrator picks up SQS message          │
 │                                             │
-│  ⚡ PARALLEL:                               │
+│  PARALLEL:                                  │
 │  ├─ PR Analysis Agent    → state.pr_context │
 │  ├─ Jira Context Agent   → state.jira_ctx   │
 │  └─ CI Pipeline Monitor  → state.ci_results │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 3: ANALYSIS  (30–90s)               │
+│  PHASE 3: ANALYSIS  (30–90s)                │
 │                                             │
-│  ⚡ PARALLEL:                               │
+│  PARALLEL:                                  │
 │  ├─ Code Review Agent    → review_results   │
 │  └─ Test Coverage Agent  → coverage_results │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 4: ACTION  (5–15s)                  │
+│  PHASE 4: ACTION  (5–15s)                   │
 │                                             │
-│  ⚡ PARALLEL:                               │
+│  PARALLEL:                                  │ 
 │  ├─ GitHub Comment Agent → PR comments      │
-│  └─ Jira Update Agent   → Ticket updates   │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
+│  └─ Jira Update Agent   → Ticket updates    │
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
 ┌─────────────────────────────────────────────┐
-│  PHASE 5: ANALYTICS  (Async)               │
+│  PHASE 5: ANALYTICS  (Async)                │
 │  Analytics Agent → Developer quality scores │
 │  Post-merge defect tracking (30-day window) │
 └─────────────────────────────────────────────┘
