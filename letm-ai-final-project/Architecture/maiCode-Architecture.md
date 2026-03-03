@@ -4,7 +4,7 @@
 
 maiCode is an enterprise-grade AI agentic system built for Nagarro that automates the entire code review lifecycle. It triggers automatically on GitHub Pull Requests, fetches associated Jira tickets via MCP, monitors CI pipelines, reviews code against ticket intent using AI, generates intelligent review comments, identifies missing test cases, updates Jira tickets with review status, and automatically creates QA test tickets. Post-merge, it tracks developer quality metrics to enable data-driven engineering management.
 
-**Tech Stack:** Python 3.12 · LangGraph · LangChain · FastMCP · FastAPI · OpenAI GPT-4o · AWS (ECS Fargate, Lambda, SQS, RDS PostgreSQL, S3) · GitHub Actions · Jira Cloud
+**Tech Stack:** Python 3.12 · LangGraph · LangChain · FastMCP · FastAPI · OpenAI GPT-4o · AWS (ECS Fargate, Lambda, SQS, S3) · MongoDB · GitHub Actions · Jira Cloud
 
 **Scale:** 10–150 developers · ~100 PRs/day · Multi-repository · Mixed programming languages
 
@@ -18,14 +18,11 @@ maiCode follows an **Event-Driven Architecture** with a **Supervisor-Worker agen
 
 ### HLD Diagram
 
-![maiCode-HLD](maiCode-HLD.png)
-
+<!-- INSERT HLD DIAGRAM IMAGE HERE -->
 
 ---
 
 ## 3. Application Flow
-
-![maiCode-HLD](maiCode-AppFlow.png)
 
 ### Phase 1 — Ingestion (`< 500ms`)
 
@@ -125,7 +122,7 @@ Agent              │
     ⚡ PARALLEL JOIN
           │
           ▼
-   Workflow state persisted to PostgreSQL
+   Workflow state persisted to MongoDB
    SQS message deleted
 ```
 
@@ -219,6 +216,17 @@ GitHub Webhook
 
 **MapReduce + Structured Output** — Processes many items by mapping a computation over each independently, then reducing into aggregates. LLM generates machine-parseable JSON output. Used by Analytics Agent to compute per-developer metrics across many PRs.
 
+### Token Budget Allocation
+
+| Agent | % of Budget | Justification |
+|-------|-------------|---------------|
+| Code Review Agent | 60% | 3 LLM passes on full diff — the core value |
+| Test Coverage Agent | 20% | 1–2 LLM calls for test generation |
+| GitHub Comment Agent | 5% | 1 light call for formatting |
+| Jira Update Agent | 5% | 1 light call for formatting |
+| Analytics Agent | 10% | Summarization for reports |
+| Orchestrator / PR Analysis / CI Monitor / Jira Context | 0% | No or negligible LLM calls |
+
 ---
 
 ## 5. LangGraph State Flow
@@ -268,13 +276,13 @@ All agents communicate exclusively through a shared state object (TypedDict). Ag
 | LLM | OpenAI GPT-4o | Abstract interface allows provider switch |
 | Web Framework | FastAPI | Admin dashboard API, health checks |
 | GitHub Client | PyGithub + httpx | REST v3 + GraphQL v4 |
-| Database | PostgreSQL 16 (RDS) | Via SQLAlchemy + Alembic migrations |
+| Database | MongoDB | Via Motor (async driver) + PyMongo |
 | Queue | Amazon SQS | Event queue + DLQ |
 | Object Storage | Amazon S3 | Reports, artifacts, LLM audit logs |
 | Compute | ECS Fargate | Serverless containers, auto-scaling 2–20 tasks |
 | Webhook Processor | AWS Lambda | Stateless, <500ms response |
-| Secrets | AWS Secrets Manager | Auto-rotation |
 | Scheduler | Amazon EventBridge | Cron for daily analytics |
+| Auth | AWS Cognito | SSO federation (SAML/OIDC) |
 | IaC | Terraform | Modular, state per layer |
 | Containers | Docker | Multi-stage builds |
 | Observability | CloudWatch + LangSmith | Logs, metrics, LLM traces |
@@ -295,9 +303,4 @@ All agents communicate exclusively through a shared state object (TypedDict). Ag
 
 **Why ECS Fargate over Lambda for agents?** Lambda has a 15-minute max timeout. The CI Pipeline Monitor alone can wait up to 30 minutes for workflows to complete. ECS Fargate tasks have no timeout ceiling, support long-running processes, avoid cold start issues, and allow sidecar containers (Jira MCP server runs as a sidecar in the same task definition).
 
-**Author**
-- Abhinav Singh (abhinav.singh04@nagarro.com)
-
-**Co-Authors**
-- Mayank Singh (mayank.singh01@nagarro.com)
-- Avinash Yadav (avinash.yadav@nagarro.com)
+**Why no Redis?** At 100 PRs/day (~300 events/day with commits), the deduplication and caching load doesn't justify a dedicated Redis cluster. Deduplication is handled by checking MongoDB for existing audit records before starting the pipeline. LLM response caching can be added later if cost optimization demands it. This reduces infrastructure complexity and cost.
